@@ -3,178 +3,174 @@
 namespace OneGiba\DataLayer;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use OneGiba\DataLayer\Contracts\RepositoryInterface;
-use OneGiba\DataLayer\Traits\Querialize;
-use OneGiba\DataLayer\Traits\MakesErrorResponses;
-use Exception;
 
 abstract class Repository implements RepositoryInterface
 {
-    use Querialize, MakesErrorResponses;
-
     /**
-     * @var \Illuminate\Database\Eloquent\Model
+     * @var \Illuminate\Database\Eloquent\Model|null
      */
-    protected $model;
+    protected $model = null;
 
     /**
-     * @param \Illuminate\Database\Eloquent\Model $model
+     * @param \Illuminate\Database\Eloquent\Model|null $model
      * @return void
      */
-    public function __construct(Model $model)
+    public function __construct(?Model $model = null)
     {
-        $this->model = $model;
+        $this->model = $model ?? app()->make($this->model);
     }
 
     /**
-     * Get all rows
-     *
-     * @param array   $columns
-     * @param array   $sortableFields
-     * @param integer $limit
-     * @return \Illuminate\Support\Collection
+     * { @inheritdoc }
      */
-    public function findAll(
-        array $columns = ['*'],
-        array $sortableFields = ['id'],
-        $limit = 0
-    ) {
-        return $this->query($this->model)
-            ->select($columns)
-            ->orderBy($sortableFields)
-            ->limit($limit)
-            ->get();
-    }
-
-    /**
-     * Get the first row
-     *
-     * @param array $conditions
-     * @return \Illuminate\Database\Eloquent\Model
-     */
-    public function findFirst(array $conditions = [], $columns = ['*'])
+    public function findById(int $resourceId, array $columns = ['*'], array $with = []): ?Model
     {
-        return $this->query($this->model)
-            ->select($columns)
-            ->apply($conditions)
-            ->first();
+        return $this->model
+            ->with($with)
+            ->find($resourceId, $columns);
     }
 
     /**
-     * Find by ID
-     *
-     * @param integer $resourceId
-     * @param array $columns
-     * @return \Illuminate\Database\Eloquent\Model
+     * { @inheritdoc }
      */
-    public function findById($resourceId, $columns = ['*'])
+    public function findFirst(string $attribute, string $value, array $columns = ['*'], array $with = []): ?Model
     {
-        return $this->model->find($resourceId, $columns);
+        return $this->model
+            ->with($with)
+            ->where($attribute, '=', $value)
+            ->first($columns);
     }
 
     /**
-     * Find by...
-     *
-     * @param array $conditions
-     * @param array $columns
-     * @param array $sortableFields
-     * @param integer $limit
-     * @return \Illuminate\Support\Collection
+     * { @inheritdoc }
      */
-    public function findBy(
-        array $conditions,
-        array $columns = ['*'],
-        array $sortableFields = ['id'],
-        $limit = 0
-    ) {
-        return $this->query($this->model)
-            ->select($columns)
-            ->apply($conditions)
-            ->orderBy($sortableFields)
-            ->get();
-    }
-
-    /**
-     * Paginate results
-     *
-     * @param integer $perPage
-     * @param array $conditions
-     * @param array $columns
-     * @param array $sortableFields
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
-     */
-    public function paginate(
-        $perPage,
-        array $conditions = [],
-        array $columns = ['*'],
-        array $sortableFields = ['id']
-    ) {
-        return $this->query($this->model)
-            ->select($columns)
-            ->apply($conditions)
-            ->orderBy($sortableFields)
-            ->paginate($perPage);
-    }
-
-    /**
-     * Create a record
-     *
-     * @param array $data
-     * @return \Illuminate\Database\Eloquent\Model
-     * @throws \OneGiba\DataLayer\Exceptions\OnCreatingException
-     */
-    public function create(array $data)
+    public function findBy(string $attribute, string $value, array $columns = ['*'], array $with = []): Collection
     {
-        try {
-            return $this->model->create($data);
-        } catch (Exception $error) {
-            $this->throwErrorOnCreating([
-                'data' => $data,
-            ], $error->getMessage());
+        return $this->model
+            ->with($with)
+            ->where($attribute, '=', $value)
+            ->get($columns);
+    }
+
+    /**
+     * { @inheritdoc }
+     */
+    public function findAll(array $columns = ['*'], array $with = []): Collection
+    {
+        return $this->model
+            ->with($with)
+            ->get($columns);
+    }
+
+    /**
+     * { @inheritdoc }
+     */
+    public function findWhere(array $where, array $columns = ['*'], array $with = []): Collection
+    {
+        $model = $this->model instanceof Model ? $this->model->query() : $this->model;
+
+        foreach ($where as $attribute => $value) {
+            if (is_array($value)) {
+                list($attribute, $condition, $value) = $value;
+                $model->where($attribute, $condition, $value);
+            } else {
+                $model->where($attribute, '=', $value);
+            }
         }
+        return $model
+            ->with($with)
+            ->get($columns);
     }
 
     /**
-     * Update data
-     *
-     * @param array   $data
-     * @param integer $resourceId
-     * @return boolean
-     * @throws \OneGiba\DataLayer\Exceptions\OnUpdatingException
+     * { @inheritdoc }
      */
-    public function update(array $data, $resourceId)
+    public function findWhereBetween(string $attribute, array $values, array $columns = ['*'], array $with = []): Collection
     {
-        $model = $this->findById($resourceId);
+        return $this->model
+            ->with($with)
+            ->whereBetween($attribute, $values)
+            ->get($columns);
+    }
 
-        if (!$model) {
+    /**
+     * { @inheritdoc }
+     */
+    public function findWhereIn(string $attribute, array $values, array $columns = ['*'], array $with = []): Collection
+    {
+        return $this->model
+            ->with($with)
+            ->whereIn($attribute, $values)
+            ->get($columns);
+    }
+
+    /**
+     * { @inheritdoc }
+     */
+    public function findWhereNotIn(string $attribute, array $values, array $columns = ['*'], array $with = []): Collection
+    {
+        return $this->model
+            ->with($with)
+            ->whereNotIn($attribute, $values)
+            ->get($columns);
+    }
+
+    /**
+     * { @inheritdoc }
+     */
+    public function create(array $attributes): ?Model
+    {
+        return $this->model->create($attributes);
+    }
+
+    /**
+     * { @inheritdoc }
+     */
+    public function update(array $attributes, int $resourceId): bool
+    {
+        if (is_null($this->model = $this->findById($resourceId))) {
             return false;
         }
 
-        try {
-            return $model->fill($data)->save();
-        } catch (Exception $error) {
-            $this->throwErrorOnUpdating([
-                'data'        => $data,
-                'resource_id' => $resourceId,
-            ], $error->getMessage());
-        }
+        return $this->model
+            ->fill($attributes)
+            ->save();
     }
 
     /**
-     * Delete row
-     *
-     * @param mixed $resourceId
-     * @return integer
-     * @throws \OneGiba\DataLayer\Exceptions\OnDeletingException
+     * { @inheritdoc }
      */
-    public function delete($resourceId)
+    public function delete(mixed $resourceId): int
     {
-        try {
-            return $this->model->destroy($resourceId);
-        } catch (Exception $error) {
-            $this->throwErrorOnDeleting([
-                'resource_id' => $resourceId,
-            ], $error->getMessage());
-        }
+        return $this->model->destroy($resourceId);
+    }
+
+    /**
+     * { @inheritdoc }
+     */
+    public function with(mixed $relationships): self
+    {
+        $this->model = $this->model->with($relationships);
+        return $this;
+    }
+
+    /**
+     * { @inheritdoc }
+     */
+    public function orderBy(string $column, string $direction = ReservedWords::QUERY_ASC_DIRECTION): self
+    {
+        $this->model = $this->model->orderBy($column, $direction);
+        return $this;
+    }
+
+    /**
+     * { @inheritdoc }
+     */
+    public function paginate(int $perPage = null, array $columns = ['*'], string $pageName = ReservedWords::PAGE_NAME, ?int $page = null): LengthAwarePaginator
+    {
+        return $this->model->paginate($perPage, $columns, $pageName, $page);
     }
 }
